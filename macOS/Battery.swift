@@ -9,9 +9,12 @@ struct Reading: Equatable {
     static let unavailable = Reading(status: "Battery information unavailable")
     static let absent = Reading(status: "No battery detected")
 
+    var levelDescription: String {
+        percent.map { "Battery level \($0) percent." } ?? status
+    }
+
     var summary: String {
-        guard let percent else { return status }
-        return "Battery level \(percent) percent. \(status)."
+        percent == nil ? status : "\(levelDescription) \(status)."
     }
 
     static func current() -> Reading {

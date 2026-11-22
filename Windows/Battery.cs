@@ -16,7 +16,8 @@ internal sealed class Reading
     public int? Percent;
     public bool? OnBattery;
     public string Status;
-    public string Summary { get { return Percent.HasValue ? "Battery level " + Percent + " percent. " + Status + "." : Status; } }
+    public string LevelDescription { get { return Percent.HasValue ? "Battery level " + Percent + " percent." : Status; } }
+    public string Summary { get { return Percent.HasValue ? LevelDescription + " " + Status + "." : Status; } }
 
     public static Reading Current()
     {

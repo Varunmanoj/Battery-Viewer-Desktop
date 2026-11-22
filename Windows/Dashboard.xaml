@@ -5,6 +5,10 @@
  Background="{DynamicResource CanvasBrush}" Foreground="{DynamicResource InkBrush}">
  <DockPanel>
   <Menu DockPanel.Dock="Top" Background="{DynamicResource CanvasBrush}" Foreground="{DynamicResource InkBrush}">
+   <MenuItem x:Name="FileMenu" Header="_File" Padding="10,6">
+    <MenuItem x:Name="Quit" Header="_Quit Battery % Viewer" InputGestureText="Ctrl+Q"
+     Foreground="{DynamicResource {x:Static SystemColors.MenuTextBrushKey}}"/>
+   </MenuItem>
    <MenuItem x:Name="ViewMenu" Header="_View" Padding="10,6">
     <MenuItem x:Name="AdjustSize" Header="Battery Percentage _Size…" Foreground="{DynamicResource {x:Static SystemColors.MenuTextBrushKey}}"/>
    </MenuItem>

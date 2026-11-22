@@ -10,6 +10,8 @@ Choose **View → Battery Percentage Size** or open **Settings** to adjust the b
 
 Automatic speech is off at first. In **Settings → Automatic announcements**, turn on **Announce low battery** and set **Low battery threshold** from 1% to 100%. The default is 20%. The alert plays when the battery drops to or below the threshold while unplugged, or when you unplug at or below the threshold. You can also enable an announcement whenever power is connected or disconnected. The app must be running for these announcements.
 
+In **Settings → Background**, turn on **Keep running when the window closes** to continue monitoring and playing enabled announcements with the window closed. Use the **Battery % Viewer** icon in the Mac menu bar or the Windows notification area to reopen the window, speak the battery level or charging status, or quit completely. On Windows, press Windows+B to reach the notification area and open the icon’s context menu. The setting is off by default, so closing the window quits the app until you enable it.
+
 ### Keyboard shortcuts
 
 | Action | Mac | Windows |
@@ -20,7 +22,8 @@ Automatic speech is off at first. In **Settings → Automatic announcements**, t
 | Light appearance | Command+L | Ctrl+L |
 | Dark appearance | Command+D | Ctrl+D |
 | Close Settings | Escape or Done | Escape or Done |
-| Quit | Command+Q | Alt+F4 |
+| Close window | Command+W | Alt+F4 |
+| Quit completely | Command+Q | Ctrl+Q |
 
 Use Tab and Shift+Tab to move between controls. On Mac, enable Keyboard navigation in System Settings to tab through every control. VoiceOver and Windows screen readers can navigate the battery reading and controls through their normal reading commands.
 

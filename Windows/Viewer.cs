@@ -14,6 +14,7 @@ using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using Forms = System.Windows.Forms;
 
 [assembly: AssemblyTitle("Battery % Viewer")]
 [assembly: AssemblyProduct("Battery % Viewer")]
@@ -29,6 +30,9 @@ internal sealed class Viewer
     private readonly Window window = Load<Window>("Dashboard");
     private readonly Speech speech = new Speech();
     private readonly DispatcherTimer timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+    private Forms.NotifyIcon trayIcon;
+    private bool runInBackground = Get("RunInBackground", "0") == "1";
+    private bool quitting;
     private Reading reading;
     private readonly TextBlock level, status;
     private readonly UniformGrid gauge;
@@ -97,10 +101,15 @@ internal sealed class Viewer
             var app = new Application();
             app.Resources.MergedDictionaries.Add(Load<ResourceDictionary>("Styles"));
             var viewer = new Viewer();
-            var wait = ThreadPool.RegisterWaitForSingleObject(reopen, (s, timedOut) =>
-                app.Dispatcher.BeginInvoke(new Action(viewer.ActivateWindow)), null, Timeout.Infinite, false);
-            try { app.Run(viewer.window); }
-            finally { wait.Unregister(null); }
+            using (var quit = new EventWaitHandle(false, EventResetMode.AutoReset, key + ".Quit"))
+            {
+                var wait = ThreadPool.RegisterWaitForSingleObject(reopen, (s, timedOut) =>
+                    app.Dispatcher.BeginInvoke(new Action(viewer.ActivateWindow)), null, Timeout.Infinite, false);
+                var quitWait = ThreadPool.RegisterWaitForSingleObject(quit, (s, timedOut) =>
+                    app.Dispatcher.BeginInvoke(new Action(viewer.Quit)), null, Timeout.Infinite, true);
+                try { app.Run(viewer.window); }
+                finally { wait.Unregister(null); quitWait.Unregister(null); }
+            }
         }
     }
 
@@ -109,9 +118,55 @@ internal sealed class Viewer
 
     private void ActivateWindow()
     {
+        if (!window.IsVisible) window.Show();
         if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
         var target = window.OwnedWindows.Cast<Window>().LastOrDefault(w => w.IsVisible) ?? window;
         target.Activate();
+    }
+
+    private void Quit()
+    {
+        quitting = true;
+        Application.Current.Shutdown();
+    }
+
+    private void UpdateTrayIcon()
+    {
+        if (!runInBackground)
+        {
+            RemoveTrayIcon();
+            return;
+        }
+        if (trayIcon != null) return;
+        var menu = new Forms.ContextMenuStrip();
+        menu.Items.Add("&Open Battery % Viewer", null, (s, e) => ActivateWindow());
+        menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add("Speak battery &level", null, (s, e) => {
+            Refresh(false);
+            speech.Say(reading.LevelDescription, voice);
+        });
+        menu.Items.Add("Speak &charging status", null, (s, e) => Say(true));
+        menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add("&Quit Battery % Viewer", null, (s, e) => Quit());
+
+        trayIcon = new Forms.NotifyIcon {
+            Icon = System.Drawing.Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location)
+                ?? (System.Drawing.Icon)System.Drawing.SystemIcons.Application.Clone(),
+            Text = "Battery % Viewer",
+            ContextMenuStrip = menu,
+            Visible = true
+        };
+        trayIcon.MouseDoubleClick += (s, e) => { if (e.Button == Forms.MouseButtons.Left) ActivateWindow(); };
+    }
+
+    private void RemoveTrayIcon()
+    {
+        if (trayIcon == null) return;
+        trayIcon.Visible = false;
+        trayIcon.ContextMenuStrip.Dispose();
+        trayIcon.Icon.Dispose();
+        trayIcon.Dispose();
+        trayIcon = null;
     }
 
     private Viewer()
@@ -126,6 +181,7 @@ internal sealed class Viewer
         speak.Click += (s, e) => Say(false);
         settings.Click += (s, e) => OpenSettings();
         ((MenuItem)window.FindName("AdjustSize")).Click += (s, e) => OpenSettings();
+        ((MenuItem)window.FindName("Quit")).Click += (s, e) => Quit();
         speak.ToolTip = "Speak battery level and power status (Ctrl+S)";
         settings.ToolTip = "Display and speech settings (Ctrl+,)";
         window.PreviewKeyDown += Shortcuts;
@@ -135,8 +191,14 @@ internal sealed class Viewer
         }));
         SystemParameters.StaticPropertyChanged += SystemAppearanceChanged;
         SystemEvents.UserPreferenceChanged += UserPreferenceChanged;
+        window.Closing += (s, e) => {
+            if (!runInBackground || quitting) return;
+            e.Cancel = true;
+            window.Dispatcher.BeginInvoke(new Action(() => { if (!quitting) window.Hide(); }));
+        };
         window.Closed += (s, e) => {
             timer.Stop();
+            RemoveTrayIcon();
             SystemParameters.StaticPropertyChanged -= SystemAppearanceChanged;
             SystemEvents.UserPreferenceChanged -= UserPreferenceChanged;
             speech.Dispose();
@@ -146,6 +208,7 @@ internal sealed class Viewer
         Refresh(false);
         timer.Tick += (s, e) => Refresh(true);
         timer.Start();
+        UpdateTrayIcon();
     }
 
     private void SystemAppearanceChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -206,7 +269,7 @@ internal sealed class Viewer
     {
         if (e.Key == Key.F1)
         {
-            MessageBox.Show(window, "Ctrl+S  Speak battery\nCtrl+C  Speak power status\nCtrl+,  Settings\nCtrl+L  Light appearance\nCtrl+D  Dark appearance\nTab and Shift+Tab  Move between controls\nEscape  Close Settings", "Keyboard shortcuts");
+            MessageBox.Show(window, "Ctrl+S  Speak battery\nCtrl+C  Speak power status\nCtrl+,  Settings\nCtrl+L  Light appearance\nCtrl+D  Dark appearance\nCtrl+Q  Quit Battery % Viewer\nTab and Shift+Tab  Move between controls\nEscape  Close Settings", "Keyboard shortcuts");
             e.Handled = true; return;
         }
         if (Keyboard.Modifiers != ModifierKeys.Control) return;
@@ -215,6 +278,7 @@ internal sealed class Viewer
             case Key.S: Say(false); break;
             case Key.C: Say(true); break;
             case Key.OemComma: OpenSettings(); break;
+            case Key.Q: Quit(); break;
             case Key.D: case Key.L:
                 theme = e.Key == Key.D ? "Dark" : "Light"; Save("Theme", theme); ApplyTheme(); break;
             default: return;
@@ -235,7 +299,8 @@ internal sealed class Viewer
     {
         var box = (CheckBox)dialog.FindName(name);
         box.IsChecked = initial;
-        box.Click += (s, e) => change(box.IsChecked == true);
+        box.Checked += (s, e) => change(true);
+        box.Unchecked += (s, e) => change(false);
     }
 
     private void OpenSettings()
@@ -287,6 +352,11 @@ internal sealed class Viewer
             thresholdValue.Text = lowThreshold + "%";
             Save("LowBatteryThreshold", lowThreshold.ToString());
         };
+        Toggle(dialog, "RunInBackground", runInBackground, value => {
+            runInBackground = value;
+            Save("RunInBackground", value ? "1" : "0");
+            UpdateTrayIcon();
+        });
         dialog.Loaded += (s, e) => sizeSlider.Focus();
         dialog.ShowDialog();
         ((Button)window.FindName("Settings")).Focus();

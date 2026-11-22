@@ -32,6 +32,11 @@
     <Slider x:Name="LowThreshold" MinHeight="24" SmallChange="1" LargeChange="5"
      TickFrequency="1" IsSnapToTickEnabled="True" IsEnabled="{Binding IsChecked, ElementName=Low}"
      AutomationProperties.LabeledBy="{Binding ElementName=LowThresholdLabel}"/>
+    <TextBlock Text="Background" FontSize="19" FontWeight="SemiBold" Margin="0,14,0,4"/>
+    <CheckBox x:Name="RunInBackground" Foreground="{DynamicResource InkBrush}" Margin="0,4" VerticalContentAlignment="Center">
+     <TextBlock TextWrapping="Wrap" Text="Keep running when the window closes"/>
+    </CheckBox>
+    <TextBlock TextWrapping="Wrap" Text="Use the Battery % Viewer notification area icon to reopen or quit."/>
     <TextBlock x:Name="About" Text="About" FontSize="19" FontWeight="SemiBold" Margin="0,14,0,4"/>
     <TextBlock x:Name="Version" TextWrapping="Wrap"/>
    </StackPanel>

@@ -23,6 +23,13 @@ private final class Monitor: ObservableObject {
     @Published private(set) var reading = Reading.current()
     @Published var settingsOpen = false
     private let synth = AVSpeechSynthesizer()
+    private var polling: AnyCancellable?
+
+    init() {
+        polling = Timer.publish(every: 5, on: .main, in: .common).autoconnect().sink { [weak self] _ in
+            self?.refresh(automatic: true)
+        }
+    }
 
     func refresh(automatic: Bool = false) {
         let next = Reading.current()
@@ -41,6 +48,11 @@ private final class Monitor: ObservableObject {
         speak(statusOnly ? reading.status : reading.summary)
     }
 
+    func announceBatteryLevel() {
+        refresh()
+        speak(reading.levelDescription)
+    }
+
     func speak(_ text: String) {
         let utterance = AVSpeechUtterance(string: text)
         if let id = UserDefaults.standard.string(forKey: "voice"), !id.isEmpty {
@@ -53,6 +65,7 @@ private final class Monitor: ObservableObject {
 
 private struct SettingsView: View {
     @ObservedObject var monitor: Monitor
+    @ObservedObject var delegate: Delegate
     @AppStorage("percentageFontSize") private var size = PercentageSize.initial
     @AppStorage("appearance") private var appearance = "System"
     @AppStorage("voice") private var voice = ""
@@ -110,6 +123,10 @@ private struct SettingsView: View {
                         .disabled(!low)
                     }
                 }
+                Section("Background") {
+                    Toggle("Keep running when the window closes", isOn: $delegate.runInBackground)
+                    Text("Use the Battery % Viewer menu bar icon to reopen or quit.")
+                }
                 Section("About") {
                     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
                     Text(verbatim: "Battery % Viewer, version " + version)
@@ -131,13 +148,14 @@ private struct SettingsView: View {
 
 private struct Dashboard: View {
     @ObservedObject var monitor: Monitor
+    @ObservedObject var delegate: Delegate
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
     @AppStorage("percentageFontSize") private var size = PercentageSize.initial
     @AppStorage("appearance") private var appearance = "System"
     @FocusState private var focus: Focus?
     private enum Focus { case speak, settings }
-    private let timer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
     private var ink: Color { scheme == .dark ? Color(red: 0.75, green: 0.96, blue: 0.81) : Color(red: 0.06, green: 0.24, blue: 0.17) }
     private var panel: Color { scheme == .dark ? Color(red: 0.09, green: 0.17, blue: 0.14) : Color(red: 0.90, green: 0.95, blue: 0.90) }
@@ -177,24 +195,87 @@ private struct Dashboard: View {
         }
         .padding(20).frame(minWidth: 360, minHeight: 360)
         .preferredColorScheme(appearance == "Dark" ? .dark : appearance == "Light" ? .light : nil)
-        .onAppear { focus = .speak }
-        .onReceive(timer) { _ in monitor.refresh(automatic: true) }
+        .onAppear {
+            delegate.monitor = monitor
+            delegate.openViewerWindow = { [openWindow] in openWindow(id: "battery") }
+            focus = .speak
+        }
         .sheet(isPresented: $monitor.settingsOpen, onDismiss: { focus = .settings }) {
-            SettingsView(monitor: monitor).preferredColorScheme(appearance == "Dark" ? .dark : appearance == "Light" ? .light : nil)
+            SettingsView(monitor: monitor, delegate: delegate)
+                .preferredColorScheme(appearance == "Dark" ? .dark : appearance == "Light" ? .light : nil)
         }
     }
 }
 
-private class Delegate: NSObject, NSApplicationDelegate {
+private final class Delegate: NSObject, NSApplicationDelegate, ObservableObject {
+    @Published var runInBackground = UserDefaults.standard.bool(forKey: "runInBackground") {
+        didSet {
+            UserDefaults.standard.set(runInBackground, forKey: "runInBackground")
+            updateStatusItem()
+        }
+    }
+    weak var monitor: Monitor?
+    var openViewerWindow: (() -> Void)?
+    private var statusItem: NSStatusItem?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        updateStatusItem()
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        guard let window = sender.windows.first(where: { $0.identifier?.rawValue == "battery" })
-            ?? sender.windows.first(where: { $0.canBecomeMain }) else { return true }
-        if window.isMiniaturized { window.deminiaturize(nil) }
-        (window.attachedSheet ?? window).makeKeyAndOrderFront(nil)
+        guard openViewerWindow != nil else { return true }
+        showViewer()
         return false
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        guard runInBackground else { return true }
+        sender.setActivationPolicy(.accessory)
+        return false
+    }
+
+    private func updateStatusItem() {
+        guard runInBackground else {
+            if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
+            statusItem = nil
+            return
+        }
+        guard statusItem == nil else { return }
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(systemSymbolName: "battery.100percent", accessibilityDescription: "Battery % Viewer")
+        item.button?.setAccessibilityLabel("Battery % Viewer")
+        item.button?.toolTip = "Battery % Viewer"
+        let menu = NSMenu()
+        addItem("Open Battery % Viewer", action: #selector(showViewer), to: menu)
+        menu.addItem(.separator())
+        addItem("Speak battery level", action: #selector(speakBattery), to: menu)
+        addItem("Speak charging status", action: #selector(speakChargingStatus), to: menu)
+        menu.addItem(.separator())
+        addItem("Quit Battery % Viewer", action: #selector(quit), to: menu)
+        item.menu = menu
+        statusItem = item
+    }
+
+    private func addItem(_ title: String, action: Selector, to menu: NSMenu) {
+        menu.addItem(withTitle: title, action: action, keyEquivalent: "").target = self
+    }
+
+    @objc private func showViewer() {
+        NSApp.setActivationPolicy(.regular)
+        if let window = NSApp.windows.first(where: {
+            $0.identifier?.rawValue == "battery" && ($0.isVisible || $0.isMiniaturized)
+        }) {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            (window.attachedSheet ?? window).makeKeyAndOrderFront(nil)
+        } else {
+            openViewerWindow?()
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func speakBattery() { monitor?.announceBatteryLevel() }
+    @objc private func speakChargingStatus() { monitor?.announce(statusOnly: true) }
+    @objc private func quit() { NSApp.terminate(nil) }
 }
 
 @main
@@ -203,7 +284,7 @@ struct BatteryViewer: App {
     @StateObject private var monitor = Monitor()
     @AppStorage("appearance") private var appearance = "System"
     var body: some Scene {
-        Window("Battery % Viewer", id: "battery") { Dashboard(monitor: monitor) }
+        Window("Battery % Viewer", id: "battery") { Dashboard(monitor: monitor, delegate: delegate) }
             .defaultSize(width: 580, height: 430)
             .commands {
                 CommandGroup(after: .appInfo) {

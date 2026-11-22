@@ -2,6 +2,10 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -Name WindowVisibility -Namespace BatteryViewerTests -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool IsWindowVisible(System.IntPtr handle);
+'@
 $exe = Join-Path $env:LOCALAPPDATA 'Programs\Battery Percent Viewer\BatteryViewer.exe'
 $process = Get-Process BatteryViewer | Where-Object Path -eq $exe | Select-Object -First 1
 if (!$process -or !$process.MainWindowHandle) { throw 'Installed application window is missing.' }
@@ -13,6 +17,17 @@ function Find-Control($parent, $id) {
 }
 function Invoke-Button($button) {
     $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+}
+function Find-Settings($parent) {
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::NameProperty, 'Settings')
+    for ($i = 0; $i -lt 30; $i++) {
+        $dialog = $parent.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition) |
+            Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window } | Select-Object -First 1
+        if ($dialog) { return $dialog }
+        Start-Sleep -Milliseconds 150
+    }
+    throw 'Settings dialog did not open.'
 }
 $level = Find-Control $window 'Level'
 $status = Find-Control $window 'Status'
@@ -27,16 +42,8 @@ $view = Find-Control $window 'ViewMenu'
 $view.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
 Start-Sleep -Milliseconds 200
 Invoke-Button (Find-Control $view 'AdjustSize')
-$dialog = $null
-for ($i = 0; $i -lt 30 -and !$dialog; $i++) {
-    Start-Sleep -Milliseconds 150
-    $condition = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::NameProperty, 'Settings')
-    $dialog = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition) |
-        Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window } | Select-Object -First 1
-}
-if (!$dialog) { throw 'Settings dialog did not open.' }
-foreach ($id in 'SizeSlider','ThemePicker','Voices','Preview','Power','Low','LowThreshold','About','Version','Done') {
+$dialog = Find-Settings $window
+foreach ($id in 'SizeSlider','ThemePicker','Voices','Preview','Power','Low','LowThreshold','RunInBackground','About','Version','Done') {
     $control = Find-Control $dialog $id
     if (!$control.Current.Name) { throw "Missing accessible name for $id." }
     Write-Output ("{0} = {1}" -f $id, $control.Current.Name)
@@ -129,3 +136,54 @@ if (!$belowCustom.ShouldAnnounce($aboveCustom, $false, 35) -or
     throw 'Custom low battery threshold'
 }
 Write-Output 'Windows accessibility and battery state checks passed.'
+
+$prefs = 'HKCU:\Software\Varun Manoj Kumar\Battery Viewer'
+$wasBackground = (Get-ItemProperty $prefs -ErrorAction SilentlyContinue).RunInBackground -eq '1'
+$mainHandle = $process.MainWindowHandle
+try {
+    Invoke-Button $settings
+    $dialog = Find-Settings $window
+    $background = (Find-Control $dialog 'RunInBackground').GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+    if (!$wasBackground) { $background.Toggle() }
+    if ((Get-ItemPropertyValue $prefs RunInBackground) -ne '1') { throw 'The background setting did not save.' }
+    Invoke-Button (Find-Control $dialog 'Done')
+    Start-Sleep -Milliseconds 300
+    if (!$process.CloseMainWindow()) { throw 'Could not close the main window.' }
+    Start-Sleep -Milliseconds 400
+    $process.Refresh()
+    if ($process.HasExited) { throw 'Closing exited the viewer with background mode on.' }
+    if ([BatteryViewerTests.WindowVisibility]::IsWindowVisible($mainHandle)) { throw 'Closing left the main window visible.' }
+
+    $repeat = Start-Process -FilePath $exe -PassThru
+    if (!$repeat.WaitForExit(5000)) { throw 'A background process should receive the repeat launch.' }
+    for ($i = 0; $i -lt 30 -and ![BatteryViewerTests.WindowVisibility]::IsWindowVisible($mainHandle); $i++) {
+        Start-Sleep -Milliseconds 150
+    }
+    if (![BatteryViewerTests.WindowVisibility]::IsWindowVisible($mainHandle)) { throw 'The existing window did not reopen.' }
+    $window = [System.Windows.Automation.AutomationElement]::FromHandle($mainHandle)
+    $file = Find-Control $window 'FileMenu'
+    $file.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+    Start-Sleep -Milliseconds 200
+    Invoke-Button (Find-Control $file 'Quit')
+    if (!$process.WaitForExit(5000)) { throw 'Explicit Quit should stop the process even in background mode.' }
+    Write-Output 'Background close hid the window, relaunch reopened the same process, and Quit exited.'
+} finally {
+    if (!$wasBackground) { Set-ItemProperty $prefs RunInBackground '0' }
+}
+if (!$wasBackground) {
+    $normal = Start-Process -FilePath $exe -PassThru
+    $normalWindow = $null
+    $processId = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $normal.Id)
+    for ($i = 0; $i -lt 40 -and !$normalWindow; $i++) {
+        Start-Sleep -Milliseconds 150
+        $normalWindow = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+            [System.Windows.Automation.TreeScope]::Children, $processId) |
+            Where-Object { $_.Current.Name -eq 'Battery % Viewer' -and !$_.Current.IsOffscreen } |
+            Select-Object -First 1
+    }
+    if (!$normalWindow) { throw 'Could not find the restarted viewer window.' }
+    $normalWindow.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
+    if (!$normal.WaitForExit(5000)) { throw 'Closing with background mode off should exit.' }
+    Write-Output 'Normal close exited with background mode off.'
+}
