@@ -1,0 +1,40 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Settings" Width="495" Height="640"
+ MinWidth="330" MinHeight="275" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+ FontFamily="Segoe UI" FontSize="16" UseLayoutRounding="True"
+ Background="{DynamicResource CanvasBrush}" Foreground="{DynamicResource InkBrush}">
+ <DockPanel Margin="24,16">
+  <TextBlock DockPanel.Dock="Top" Text="Settings" FontSize="28" FontWeight="Bold" Margin="0,0,0,8"/>
+  <Button DockPanel.Dock="Bottom" x:Name="Done" Content="_Done" IsCancel="True" HorizontalAlignment="Right" Margin="0,14,0,0"/>
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+   <StackPanel Margin="0,0,8,0">
+    <TextBlock Text="Display" FontSize="19" FontWeight="SemiBold"/>
+    <DockPanel Margin="0,6,0,3">
+     <TextBlock x:Name="SizeValue" DockPanel.Dock="Right" VerticalAlignment="Center"/>
+     <Label x:Name="SizeLabel" Content="Battery percentage si_ze" Target="{Binding ElementName=SizeSlider}" Padding="0" Foreground="{DynamicResource InkBrush}"/>
+    </DockPanel>
+    <Slider x:Name="SizeSlider" MinHeight="24" VerticalContentAlignment="Center"
+     SmallChange="1" LargeChange="10" TickFrequency="1" IsSnapToTickEnabled="True"
+     AutomationProperties.LabeledBy="{Binding ElementName=SizeLabel}"/>
+    <Label x:Name="ThemeLabel" Content="_Appearance" Target="{Binding ElementName=ThemePicker}" Padding="0,6,0,3" Foreground="{DynamicResource InkBrush}"/>
+    <ComboBox x:Name="ThemePicker" AutomationProperties.LabeledBy="{Binding ElementName=ThemeLabel}"/>
+    <TextBlock Text="Speech" FontSize="19" FontWeight="SemiBold" Margin="0,14,0,0"/>
+    <Label x:Name="VoiceLabel" Content="Speech _voice" Target="{Binding ElementName=Voices}" Padding="0,6,0,3" Foreground="{DynamicResource InkBrush}"/>
+    <ComboBox x:Name="Voices" AutomationProperties.LabeledBy="{Binding ElementName=VoiceLabel}"/>
+    <Button x:Name="Preview" Content="_Preview voice" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+    <TextBlock Text="Automatic announcements" FontSize="19" FontWeight="SemiBold" Margin="0,14,0,4"/>
+    <CheckBox x:Name="Power" Foreground="{DynamicResource InkBrush}" Margin="0,4" VerticalContentAlignment="Center"><TextBlock TextWrapping="Wrap" Text="When power is connected or disconnected"/></CheckBox>
+    <CheckBox x:Name="Low" Content="Announce _low battery" Foreground="{DynamicResource InkBrush}" Margin="0,4" VerticalContentAlignment="Center"/>
+    <DockPanel Margin="0,6,0,3">
+     <TextBlock x:Name="LowThresholdValue" DockPanel.Dock="Right" VerticalAlignment="Center"/>
+     <Label x:Name="LowThresholdLabel" Content="Low battery _threshold" Target="{Binding ElementName=LowThreshold}" Padding="0" Foreground="{DynamicResource InkBrush}"/>
+    </DockPanel>
+    <Slider x:Name="LowThreshold" MinHeight="24" SmallChange="1" LargeChange="5"
+     TickFrequency="1" IsSnapToTickEnabled="True" IsEnabled="{Binding IsChecked, ElementName=Low}"
+     AutomationProperties.LabeledBy="{Binding ElementName=LowThresholdLabel}"/>
+    <TextBlock x:Name="About" Text="About" FontSize="19" FontWeight="SemiBold" Margin="0,14,0,4"/>
+    <TextBlock x:Name="Version" TextWrapping="Wrap"/>
+   </StackPanel>
+  </ScrollViewer>
+ </DockPanel>
+</Window>
