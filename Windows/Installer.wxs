@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="Battery % Viewer" Manufacturer="Varun Manoj Kumar"
+           Language="1033" Version="$(var.ProductVersion)" UpgradeCode="F688382A-47B9-4BB5-B955-7AF34D2BE182">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Battery % Viewer is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Condition Message="Battery % Viewer requires 64-bit Windows.">Installed OR VersionNT64</Condition>
+    <Icon Id="BatteryViewer.exe" SourceFile="$(var.AppPath)" />
+    <Property Id="ARPPRODUCTICON" Value="BatteryViewer.exe" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="LocalPrograms" Name="Programs">
+          <Directory Id="InstallFolder" Name="Battery Percent Viewer">
+            <Component Id="Viewer" Guid="2A9D0817-1D27-47C8-A24D-DFB05487030D">
+              <File Id="ViewerExe" Source="$(var.AppPath)" />
+              <Shortcut Id="StartShortcut" Directory="ProgramMenuFolder" Name="Battery % Viewer"
+                        Target="[#ViewerExe]" WorkingDirectory="InstallFolder" Icon="BatteryViewer.exe" />
+              <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+              <RemoveFolder Id="RemoveEmptyProgramsFolder" Directory="LocalPrograms" On="uninstall" />
+              <RegistryValue Root="HKCU" Key="Software\Varun Manoj Kumar\Battery Viewer\Installer"
+                             Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+            </Component>
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder" />
+    </Directory>
+
+    <Feature Id="ViewerFeature" Title="Battery % Viewer" Level="1">
+      <ComponentRef Id="Viewer" />
+    </Feature>
+  </Product>
+</Wix>

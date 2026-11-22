@@ -1,6 +1,6 @@
 # Battery % Viewer
 
-Battery % Viewer makes a computer’s battery percentage and power status easier to see and hear. Version 10 has native Mac and Windows interfaces with a large, resizable reading, keyboard controls, and on-device speech.
+Battery % Viewer makes a computer’s battery percentage and power status easier to see and hear. Version 11.0 has native Mac and Windows interfaces with a large, resizable reading, keyboard controls, and on-device speech.
 
 ## Use the viewer
 
@@ -32,6 +32,8 @@ Use Tab and Shift+Tab to move between controls. On Mac, enable Keyboard navigati
 **Mac** — On a Mac with Xcode installed, run `./script/build_and_run.sh` to build and launch. Use `./script/build_and_run.sh --build` to build only. Copy `dist/Battery % Viewer.app` to Applications to install. The universal bundle targets macOS 13 and later and is ad-hoc signed for local use.
 
 **Windows** — On 64-bit Windows with .NET Framework 4.8 and the Windows 10 or 11 SDK installed, run `.\Windows\Build.ps1 -Install` in PowerShell from the project root. Open **Battery % Viewer** from Start. The build also produces a portable `dist\BatteryViewer.exe`. The SDK is only needed for compilation. The application runs on Windows 10 (version 1703 or later with .NET Framework 4.8 installed) and Windows 11 using local Windows speech voices.
+
+To package a release, run `./script/package_macos.sh` on Mac and `.\Windows\Package.ps1 -WixBin <WiX-binaries-folder>` on Windows. The Windows packaging script uses WiX 3.14.1. Both scripts write versioned downloads into `dist/release`. [WiX 3.14.1](https://github.com/wixtoolset/wix3/releases/tag/wix3141rtm)
 
 Current sources are in `macOS` and `Windows`. The older Python sources and installers in `MAC AppFiles` and `windows App Files` belong to previous releases.
 
